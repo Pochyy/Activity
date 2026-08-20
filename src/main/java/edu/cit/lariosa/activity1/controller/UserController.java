@@ -7,8 +7,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
 
-@RestController
-@RequestMapping("/api")
+    @RestController
+    @RequestMapping("/api")
+    @CrossOrigin(origins = "http://localhost:5173")
 public class UserController {
 
     private final UserRepository userRepository;
@@ -66,3 +67,4 @@ public class UserController {
         return ResponseEntity.ok(user.get());
     }
 }
+
