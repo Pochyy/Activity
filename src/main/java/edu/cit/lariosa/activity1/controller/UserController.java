@@ -1,70 +1,79 @@
 package edu.cit.lariosa.activity1.controller;
 
+import edu.cit.lariosa.activity1.dto.AuthRequest;
+import edu.cit.lariosa.activity1.dto.AuthResponse;
+import edu.cit.lariosa.activity1.dto.RegisterResponse;
 import edu.cit.lariosa.activity1.model.User;
 import edu.cit.lariosa.activity1.repository.UserRepository;
+import edu.cit.lariosa.activity1.security.JwtUtil;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
-import java.util.Optional;
-
-    @RestController
-    @RequestMapping("/api")
-    @CrossOrigin(origins = "http://localhost:5173")
+@RestController
+@RequestMapping("/api")
 public class UserController {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
+    private final JwtUtil jwtUtil;
 
-    public UserController(UserRepository userRepository) {
+    public UserController(UserRepository userRepository,
+                           PasswordEncoder passwordEncoder,
+                           AuthenticationManager authenticationManager,
+                           JwtUtil jwtUtil) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.authenticationManager = authenticationManager;
+        this.jwtUtil = jwtUtil;
     }
 
     // POST /api/register
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody User user) {
+    public ResponseEntity<RegisterResponse> register(@RequestBody AuthRequest request) {
 
-        if (userRepository.findByUsername(user.getUsername()).isPresent()) {
-            return ResponseEntity.badRequest()
-                    .body("Username already exists");
+        if (request.getUsername() == null || request.getUsername().isBlank()
+                || request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username and password are required");
         }
 
-        User savedUser = userRepository.save(user);
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username already exists");
+        }
 
-        return ResponseEntity.ok(savedUser);
+        User user = new User();
+        user.setUsername(request.getUsername());
+        // Never store the raw password - always hash it.
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole("ROLE_USER");
+
+        User saved = userRepository.save(user);
+
+        return ResponseEntity.ok(new RegisterResponse(saved.getId(), saved.getUsername()));
     }
 
     // POST /api/login
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody User user) {
+    public ResponseEntity<AuthResponse> login(@RequestBody AuthRequest request) {
 
-        Optional<User> existingUser =
-                userRepository.findByUsername(user.getUsername());
-
-        if (existingUser.isEmpty()) {
-            return ResponseEntity.status(401)
-                    .body("Invalid username or password");
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
+        } catch (BadCredentialsException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
 
-        User foundUser = existingUser.get();
+        User user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
 
-        if (!foundUser.getPassword().equals(user.getPassword())) {
-            return ResponseEntity.status(401)
-                    .body("Invalid username or password");
-        }
+        String token = jwtUtil.generateToken(user.getUsername());
 
-        return ResponseEntity.ok(foundUser);
-    }
-
-    // GET /api/user/{id}
-    @GetMapping("/user/{id}")
-    public ResponseEntity<?> getUser(@PathVariable Long id) {
-
-        Optional<User> user = userRepository.findById(id);
-
-        if (user.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-
-        return ResponseEntity.ok(user.get());
+        return ResponseEntity.ok(new AuthResponse(token, user.getId(), user.getUsername()));
     }
 }
-

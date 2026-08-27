@@ -1,131 +1,83 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { registerUser } from "../api/authApi";
+import { useNavigate, Link } from "react-router-dom";
+import { authApi } from "../services/api";
 
 export default function Register() {
   const navigate = useNavigate();
+
   const [form, setForm] = useState({ username: "", password: "", confirmPassword: "" });
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [serverMessage, setServerMessage] = useState(null); // { type: 'success' | 'error', text }
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  function handleChange(e) {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  }
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
 
-  function validate() {
-    const errors = {};
-    if (!form.username.trim()) {
-      errors.username = "Username is required.";
-    } else if (form.username.trim().length < 3) {
-      errors.username = "Username must be at least 3 characters.";
-    }
+  const validate = () => {
+    if (!form.username.trim()) return "Username is required";
+    if (!form.password) return "Password is required";
+    if (!form.confirmPassword) return "Please confirm your password";
+    if (form.password !== form.confirmPassword) return "Passwords do not match";
+    return null;
+  };
 
-    if (!form.password) {
-      errors.password = "Password is required.";
-    } else if (form.password.length < 6) {
-      errors.password = "Password must be at least 6 characters.";
-    }
-
-    if (!form.confirmPassword) {
-      errors.confirmPassword = "Please confirm your password.";
-    } else if (form.confirmPassword !== form.password) {
-      errors.confirmPassword = "Passwords do not match.";
-    }
-
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
-  }
-
-  async function handleSubmit(e) {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setServerMessage(null);
+    setError("");
+    setSuccess("");
 
-    if (!validate()) return;
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
 
     setSubmitting(true);
-    const result = await registerUser({
-      username: form.username.trim(),
-      password: form.password,
-    });
-    setSubmitting(false);
-
-    if (result.success) {
-      setServerMessage({
-        type: "success",
-        text: `Account "${result.user.username}" created successfully. Redirecting to login...`,
-      });
+    try {
+      // confirmPassword is intentionally never sent to the backend.
+      await authApi.register(form.username.trim(), form.password);
+      setSuccess("Registration successful. You can now log in.");
       setForm({ username: "", password: "", confirmPassword: "" });
-      setTimeout(() => navigate("/login"), 1500);
-    } else {
-      setServerMessage({ type: "error", text: result.message });
+    } catch (err) {
+      setError(err.message || "Registration failed");
+    } finally {
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
-    <div className="page">
-      <div className="card">
-        <h1>Create an account</h1>
-        <p className="subtitle">Register to get started.</p>
+    <div className="auth-page">
+      <h1>Register</h1>
+      <form onSubmit={handleSubmit}>
+        <label>
+          Username
+          <input name="username" value={form.username} onChange={handleChange} />
+        </label>
+        <label>
+          Password
+          <input type="password" name="password" value={form.password} onChange={handleChange} />
+        </label>
+        <label>
+          Confirm Password
+          <input
+            type="password"
+            name="confirmPassword"
+            value={form.confirmPassword}
+            onChange={handleChange}
+          />
+        </label>
 
-        {serverMessage && (
-          <div className={`alert alert-${serverMessage.type}`} role="alert">
-            {serverMessage.text}
-          </div>
-        )}
+        {error && <p className="error-message">{error}</p>}
+        {success && <p className="success-message">{success}</p>}
 
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              value={form.username}
-              onChange={handleChange}
-              autoComplete="username"
-            />
-            {fieldErrors.username && <span className="field-error">{fieldErrors.username}</span>}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              value={form.password}
-              onChange={handleChange}
-              autoComplete="new-password"
-            />
-            {fieldErrors.password && <span className="field-error">{fieldErrors.password}</span>}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="confirmPassword">Confirm password</label>
-            <input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              value={form.confirmPassword}
-              onChange={handleChange}
-              autoComplete="new-password"
-            />
-            {fieldErrors.confirmPassword && (
-              <span className="field-error">{fieldErrors.confirmPassword}</span>
-            )}
-          </div>
-
-          <button type="submit" className="btn-primary" disabled={submitting}>
-            {submitting ? "Creating account..." : "Register"}
-          </button>
-        </form>
-
-        <p className="switch-link">
-          Already have an account? <Link to="/login">Log in</Link>
-        </p>
-      </div>
+        <button type="submit" disabled={submitting}>
+          {submitting ? "Registering..." : "Register"}
+        </button>
+      </form>
+      <p>
+        Already have an account? <Link to="/login">Login</Link>
+      </p>
     </div>
   );
 }

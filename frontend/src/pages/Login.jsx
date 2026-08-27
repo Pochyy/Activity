@@ -1,98 +1,70 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { loginUser } from "../api/authApi";
-import { saveSession } from "../api/session";
+import { useNavigate, Link } from "react-router-dom";
+import { authApi } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
+
   const [form, setForm] = useState({ username: "", password: "" });
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [serverMessage, setServerMessage] = useState(null);
+  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  function handleChange(e) {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  }
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
 
-  function validate() {
-    const errors = {};
-    if (!form.username.trim()) errors.username = "Username is required.";
-    if (!form.password) errors.password = "Password is required.";
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
-  }
+  const validate = () => {
+    if (!form.username.trim()) return "Username is required";
+    if (!form.password) return "Password is required";
+    return null;
+  };
 
-  async function handleSubmit(e) {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setServerMessage(null);
+    setError("");
 
-    if (!validate()) return;
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
 
     setSubmitting(true);
-    const result = await loginUser({
-      username: form.username.trim(),
-      password: form.password,
-    });
-    setSubmitting(false);
-
-    if (result.success) {
-      saveSession(result.user);
-      setServerMessage({ type: "success", text: "Login successful. Redirecting..." });
-      setTimeout(() => navigate("/dashboard"), 600);
-    } else {
-      setServerMessage({ type: "error", text: result.message });
+    try {
+      const response = await authApi.login(form.username.trim(), form.password);
+      login(response); // stores token/userId/username, never the password
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Invalid username or password");
+    } finally {
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
-    <div className="page">
-      <div className="card">
-        <h1>Welcome back</h1>
-        <p className="subtitle">Log in to your account.</p>
+    <div className="auth-page">
+      <h1>Login</h1>
+      <form onSubmit={handleSubmit}>
+        <label>
+          Username
+          <input name="username" value={form.username} onChange={handleChange} />
+        </label>
+        <label>
+          Password
+          <input type="password" name="password" value={form.password} onChange={handleChange} />
+        </label>
 
-        {serverMessage && (
-          <div className={`alert alert-${serverMessage.type}`} role="alert">
-            {serverMessage.text}
-          </div>
-        )}
+        {error && <p className="error-message">{error}</p>}
 
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              value={form.username}
-              onChange={handleChange}
-              autoComplete="username"
-            />
-            {fieldErrors.username && <span className="field-error">{fieldErrors.username}</span>}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              value={form.password}
-              onChange={handleChange}
-              autoComplete="current-password"
-            />
-            {fieldErrors.password && <span className="field-error">{fieldErrors.password}</span>}
-          </div>
-
-          <button type="submit" className="btn-primary" disabled={submitting}>
-            {submitting ? "Logging in..." : "Log in"}
-          </button>
-        </form>
-
-        <p className="switch-link">
-          Don't have an account? <Link to="/register">Register</Link>
-        </p>
-      </div>
+        <button type="submit" disabled={submitting}>
+          {submitting ? "Logging in..." : "Login"}
+        </button>
+      </form>
+      <p>
+        Don't have an account? <Link to="/register">Register</Link>
+      </p>
     </div>
   );
 }

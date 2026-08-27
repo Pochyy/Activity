@@ -1,39 +1,22 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { getSession } from "../api/session";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Dashboard() {
+  const { username, logout } = useAuth();
   const navigate = useNavigate();
-  const [session, setSession] = useState(null);
 
-  useEffect(() => {
-    const current = getSession();
-    if (!current) {
-      navigate("/login");
-      return;
-    }
-    setSession(current);
-  }, [navigate]);
-
-  if (!session) return null;
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
-    <div className="page">
-      <div className="card">
-        <h1>Dashboard</h1>
-        <p className="subtitle">You are logged in.</p>
-
-        <div className="dashboard-info">
-          <div className="info-row">
-            <span className="info-label">User ID</span>
-            <span className="info-value">{session.id}</span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">Username</span>
-            <span className="info-value">{session.username}</span>
-          </div>
-        </div>
-      </div>
+    <div className="dashboard-page">
+      <h1>Welcome, {username}</h1>
+      <nav>
+        <Link to="/requests">My Service Requests</Link>
+      </nav>
+      <button onClick={handleLogout}>Logout</button>
     </div>
   );
 }
